@@ -1,6 +1,8 @@
 (function () {
   const root = document.getElementById("app");
   const accountArea = document.getElementById("account-area");
+  const languageSelect = document.getElementById("language-select");
+  const footer = document.querySelector(".footer");
   const config = window.APP_CONFIG || {};
   const createClient = window.supabase && window.supabase.createClient;
   let client;
@@ -10,11 +12,246 @@
   let focusRequestPending = false;
   let noticeTimer;
   let attemptTimer;
+  const storedLocale = localStorage.getItem("bilimqadam-language");
+  const locale = ["kk", "ru", "en"].includes(storedLocale) ? storedLocale : "kk";
+  const translations = {
+    "Учебные тесты без лишней сложности": ["Күрделі емес оқу тесттері", "Learning tests, made simple"],
+    "Проверка знаний —": ["Біліміңді тексер —", "Check your knowledge —"],
+    "спокойно и понятно": ["оңай әрі түсінікті", "simply and clearly"],
+    "Учитель создаёт тест и делится кодом. Ученики проходят его онлайн, а результаты и число попыток сохраняются.": ["Мұғалім тест жасап, кодпен бөліседі. Оқушылар онлайн тапсырады, нәтижелер мен әрекет саны сақталады.", "Teachers create tests and share a code. Students take them online, with results and attempts recorded."],
+    "Тип формы": ["Форма түрі", "Form type"],
+    "Войти": ["Кіру", "Log in"],
+    "Создать аккаунт": ["Аккаунт ашу", "Create account"],
+    "Имя и фамилия": ["Аты-жөні", "Full name"],
+    "Пароль": ["Құпиясөз", "Password"],
+    "Учительские аккаунты назначаются администратором. Новые аккаунты создаются с ролью ученика.": ["Мұғалім аккаунтын әкімші тағайындайды. Жаңа аккаунттар оқушы рөлімен ашылады.", "Teacher accounts are assigned by an administrator. New accounts are created as students."],
+    "Аккаунт создан. Подтвердите email по ссылке из письма, затем войдите.": ["Аккаунт ашылды. Хаттағы сілтеме арқылы email-ды растаңыз, содан кейін кіріңіз.", "Account created. Confirm your email using the link we sent, then log in."],
+    "Учитель": ["Мұғалім", "Teacher"],
+    "Ученик": ["Оқушы", "Student"],
+    "Пользователь": ["Пайдаланушы", "User"],
+    "Выйти": ["Шығу", "Log out"],
+    "При первом уходе со страницы появится предупреждение. При втором текущая попытка завершится и будет учтена в общем лимите из двух попыток. Система не блокирует другие приложения и не может гарантированно определить причину потери фокуса.": ["Беттен бірінші рет шыққанда ескерту беріледі. Екінші ретте ағымдағы әрекет аяқталып, рұқсат етілген әрекеттер санына есептеледі. Жүйе басқа қолданбаларды бұғаттамайды.", "Leaving the page once triggers a warning. A second departure ends the attempt and counts toward the allowed attempts. The site cannot block other apps."],
+    "Кабинет ученика": ["Оқушы кабинеті", "Student dashboard"],
+    "Обнови базу данных, выполнив supabase/upgrade_student_test_flow.sql в Supabase SQL Editor.": ["Supabase SQL Editor ішінде supabase/upgrade_student_test_flow.sql файлын орындап, дерекқорды жаңартыңыз.", "Update the database by running supabase/upgrade_student_test_flow.sql in the Supabase SQL Editor."],
+    "Тесты": ["Тесттер", "Tests"],
+    "Закрытые тесты можно будет пройти, когда учитель откроет доступ. На каждый тест даётся до двух попыток.": ["Жабық тесттер мұғалім рұқсат бергенде ашылады. Әр тестке екі әрекет беріледі.", "You can take a closed test once your teacher opens it. Each test starts with two attempts."],
+    "Доступ открыт": ["Қолжетімді", "Open"],
+    "Доступ закрыт": ["Жабық", "Closed"],
+    "вопросов": ["сұрақ", "questions"],
+    "минут": ["минут", "min"],
+    "Осталось попыток:": ["Қалған әрекет:", "Attempts left:"],
+    "ответов": ["жауап", "answers"],
+    "Завершить тест?": ["Тестті аяқтайсыз ба?", "Finish the test?"],
+    "Осталось вопросов без ответа:": ["Жауапсыз қалған сұрақ:", "Unanswered questions:"],
+    "Начать тест": ["Тестті бастау", "Start test"],
+    "Попытки использованы": ["Әрекеттер таусылды", "No attempts left"],
+    "Ожидает учителя": ["Мұғалімнің рұқсатын күтуде", "Waiting for teacher"],
+    "Пока нет тестов. Учитель добавит тесты в этот список.": ["Әзірге тест жоқ. Мұғалім тесттерді осы тізімге қосады.", "No tests yet. Your teacher will add tests here."],
+    "Сервер вернул неверный формат теста.": ["Сервер тест деректерін қате қайтарды.", "The server returned an invalid test format."],
+    "Прогресс": ["Орындалу барысы", "Progress"],
+    "ответов": ["жауап", "answers"],
+    "Отправка…": ["Жіберілуде…", "Submitting…"],
+    "Завершить тест": ["Тестті аяқтау", "Finish test"],
+    "Осталось времени:": ["Қалған уақыт:", "Time left:"],
+    "Не удалось сохранить выбранный ответ. Выберите ответ ещё раз и дождитесь сохранения.": ["Жауап сақталмады. Қайта таңдап, сақталғанын күтіңіз.", "Could not save that answer. Select it again and wait for it to save."],
+    "Осталось вопросов без ответа:": ["Жауапсыз қалған сұрақ:", "Unanswered questions:"],
+    "Завершить тест?": ["Тестті аяқтайсыз ба?", "Finish the test?"],
+    "Попытка завершена": ["Әрекет аяқталды", "Attempt ended"],
+    "Время закончилось": ["Уақыт аяқталды", "Time is up"],
+    "Ответы сохранены": ["Жауаптар сақталды", "Answers saved"],
+    "Попытка закрыта": ["Әрекет жабылды", "Attempt closed"],
+    "Время вышло": ["Уақыт бітті", "Time expired"],
+    "Тест завершён": ["Тест аяқталды", "Test completed"],
+    "Вы дважды покинули страницу теста. Эта попытка завершена и учтена.": ["Тест бетінен екі рет шықтыңыз. Бұл әрекет аяқталды және есепке алынды.", "You left the test page twice. This attempt has ended and been counted."],
+    "Правильных ответов:": ["Дұрыс жауап:", "Correct answers:"],
+    "Осталось попыток:": ["Қалған әрекет:", "Attempts left:"],
+    "В кабинет": ["Кабинетке оралу", "Back to dashboard"],
+    "Кабинет учителя": ["Мұғалім кабинеті", "Teacher dashboard"],
+    "Мои тесты": ["Менің тесттерім", "My tests"],
+    "Создавай тесты, открывай доступ и смотри результаты.": ["Тест жасап, қолжетімділікті ашып, нәтижелерді қараңыз.", "Create tests, open access, and view results."],
+    "＋ Новый тест": ["＋ Жаңа тест", "＋ New test"],
+    "Список тестов": ["Тесттер тізімі", "Test list"],
+    "Создать тест": ["Тест жасау", "Create a test"],
+    "Укажи тему и время, добавь нужное количество вопросов. Правильный ответ ученику не показывается.": ["Тақырып пен уақытты көрсетіп, сұрақтарды қосыңыз. Дұрыс жауап оқушыға көрсетілмейді.", "Set a topic and time, then add questions. Correct answers are hidden from students."],
+    "Название теста": ["Тест атауы", "Test title"],
+    "Время на тест (минуты)": ["Тест уақыты (минут)", "Time limit (minutes)"],
+    "Вопросов:": ["Сұрақ саны:", "Questions:"],
+    "Действие": ["Әрекет", "Action"],
+    "При первом уходе со страницы появится предупреждение. При втором текущая попытка завершится и будет учтена в общем лимите попыток. Учитель может разрешить дополнительные попытки. Система не блокирует другие приложения.": ["Беттен бірінші рет шыққанда ескерту беріледі. Екінші ретте әрекет аяқталып, жалпы санға есептеледі. Мұғалім қосымша әрекеттерге рұқсат бере алады. Жүйе басқа қолданбаларды бұғаттамайды.", "Leaving the page once triggers a warning. A second departure ends the attempt and counts toward the limit. Teachers can grant extra attempts. The site cannot block other apps."],
+    "Закрытые тесты можно будет пройти, когда учитель откроет доступ. На каждый тест даётся две попытки; учитель может разрешить дополнительные.": ["Жабық тестті мұғалім рұқсат бергенде тапсыра аласыз. Әр тестке екі әрекет беріледі; мұғалім қосымша әрекет қоса алады.", "You can take a closed test once your teacher opens it. Each test starts with two attempts; teachers can grant more."],
+    "Заполнить пример IT — 25 вопросов": ["IT үлгісін толтыру — 25 сұрақ", "Load IT sample — 25 questions"],
+    "＋ Добавить вопрос": ["＋ Сұрақ қосу", "＋ Add question"],
+    "Сохранить черновик": ["Нобайды сақтау", "Save draft"],
+    "Пока нет тестов. Создай первый в панели справа.": ["Тест жоқ. Біріншісін оң жақтағы панельде жасаңыз.", "No tests yet. Create your first one in the panel."],
+    "Открыт": ["Ашық", "Open"],
+    "Черновик": ["Нобай", "Draft"],
+    "Код для учеников": ["Оқушы коды", "Student code"],
+    "принимает попытки": ["әрекеттер қабылдануда", "accepting attempts"],
+    "доступ закрыт": ["қолжетімділік жабық", "access closed"],
+    "Открыть доступ": ["Қолжетімділікті ашу", "Open access"],
+    "Закрыть доступ": ["Қолжетімділікті жабу", "Close access"],
+    "Результаты": ["Нәтижелер", "Results"],
+    "Добавить вопрос": ["Сұрақ қосу", "Add question"],
+    "Удалить": ["Жою", "Remove"],
+    "Текст вопроса": ["Сұрақ мәтіні", "Question text"],
+    "Напишите вопрос": ["Сұрақты жазыңыз", "Enter a question"],
+    "Правильный ответ": ["Дұрыс жауап", "Correct answer"],
+    "Вариант": ["Нұсқа", "Option"],
+    "Вопрос": ["Сұрақ", "Question"],
+    "Заполните текст вопроса": ["Сұрақ мәтінін толтырыңыз", "Enter the question text"],
+    "Заполните все варианты ответа у вопроса": ["Сұрақтың барлық жауап нұсқасын толтырыңыз", "Fill in all answer options"],
+    "Отметьте правильный вариант у вопроса": ["Дұрыс жауап нұсқасын белгілеңіз", "Mark the correct answer"],
+    "Загрузка результатов…": ["Нәтижелер жүктелуде…", "Loading results…"],
+    "Пока никто не проходил этот тест.": ["Бұл тестті әлі ешкім тапсырған жоқ.", "No one has taken this test yet."],
+    "Результат": ["Нәтиже", "Score"],
+    "Статус": ["Күйі", "Status"],
+    "Завершена после предупреждений": ["Ескертуден кейін аяқталды", "Ended after warnings"],
+    "Сдана": ["Тапсырылды", "Submitted"],
+    "В процессе": ["Орындалуда", "In progress"],
+    "Первый запуск": ["Алғашқы іске қосу", "First setup"],
+    "Подключи базу данных": ["Дерекқорды қосыңыз", "Connect your database"],
+    "Попытка": ["Әрекет", "Attempt"],
+    "Вопрос": ["Сұрақ", "Question"],
+    "Войди в аккаунт, чтобы начать тест.": ["Тестті бастау үшін аккаунтқа кіріңіз.", "Log in to start the test."],
+    "Аккаунт учителя не может проходить тест как ученик.": ["Мұғалім аккаунты тестті оқушы ретінде тапсыра алмайды.", "A teacher account cannot take a test as a student."],
+    "Ученик использовал все разрешённые попытки.": ["Оқушы барлық рұқсат етілген әрекетті пайдаланды.", "The student has used all allowed attempts."],
+    "Активная попытка не найдена.": ["Белсенді әрекет табылмады.", "Active attempt not found."],
+    "Активная попытка не найдена или уже завершена.": ["Белсенді әрекет табылмады немесе ол аяқталған.", "Active attempt not found or already finished."],
+    "Выбран неверный вариант ответа.": ["Жауап нұсқасы дұрыс таңдалмаған.", "Invalid answer option."],
+    "Время на тест закончилось.": ["Тест уақыты аяқталды.", "The test time has expired."],
+    "Вопрос не относится к этой попытке.": ["Бұл сұрақ осы әрекетке жатпайды.", "This question does not belong to this attempt."],
+    "Тест больше не содержит вопросов.": ["Тестте енді сұрақ жоқ.", "This test no longer contains questions."],
+    "Нет доступа к результатам этого теста.": ["Бұл тест нәтижелеріне қол жеткізуге рұқсат жоқ.", "You do not have access to this test's results."],
+    "Ученик не найден среди участников этого теста.": ["Оқушы бұл тестке қатысушылар арасынан табылмады.", "Student was not found among this test's participants."],
+    "Что будет работать": ["Қолжетімді мүмкіндіктер", "What will work"],
+    "Не удалось выполнить действие. Попробуйте ещё раз.": ["Әрекет орындалмады. Қайталап көріңіз.", "Action failed. Please try again."],
+    "Загружаем…": ["Жүктелуде…", "Loading…"],
+    "Разрешить ещё попытку": ["Тағы бір әрекетке рұқсат беру", "Grant another attempt"],
+    "Доступ к тесту закрыт.": ["Тестке қолжетімділік жабылды.", "Test access closed."],
+    "Тест открыт. Поделись кодом с учениками.": ["Тест ашық. Кодты оқушылармен бөлісіңіз.", "Test is open. Share the code with students."],
+    "Тип формы": ["Форма түрі", "Form type"],
+    "Проверь, что SQL-схема из папки supabase/schema.sql установлена.": ["supabase/schema.sql файлының схемасы орнатылғанын тексеріңіз.", "Check that the SQL schema in supabase/schema.sql is installed."],
+    "Мои тесты": ["Менің тесттерім", "My tests"],
+    "Создавай тесты, открывай доступ и смотри результаты.": ["Тест жасап, қолжетімділікті ашып, нәтижелерді қараңыз.", "Create tests, open access, and view results."],
+    "＋ Новый тест": ["＋ Жаңа тест", "＋ New test"],
+    "Список тестов": ["Тесттер тізімі", "Test list"],
+    "Создать тест": ["Тест жасау", "Create a test"],
+    "Укажи тему и время, добавь нужное количество вопросов. Правильный ответ ученику не показывается.": ["Тақырып пен уақытты көрсетіп, қажетті сұрақ санын қосыңыз. Дұрыс жауап оқушыға көрсетілмейді.", "Set a topic and time, then add questions. Correct answers are hidden from students."],
+    "Название теста": ["Тест атауы", "Test title"],
+    "Время на тест (минуты)": ["Тест уақыты (минут)", "Time limit (minutes)"],
+    "Например, История Казахстана — тема 3": ["Мысалы, Қазақстан тарихы — 3-тақырып", "For example, Kazakhstan history — topic 3"],
+    "Заполнить пример IT — 25 вопросов": ["IT үлгісін толтыру — 25 сұрақ", "Load IT sample — 25 questions"],
+    "＋ Добавить вопрос": ["＋ Сұрақ қосу", "＋ Add question"],
+    "Сохранить черновик": ["Нобайды сақтау", "Save draft"],
+    "Пока нет тестов. Создай первый в панели справа.": ["Тест жоқ. Біріншісін оң жақтағы панельде жасаңыз.", "No tests yet. Create your first one in the panel."],
+    "Открыт": ["Ашық", "Open"],
+    "Черновик": ["Нобай", "Draft"],
+    "вопросов": ["сұрақ", "questions"],
+    "минут": ["минут", "minutes"],
+    "Код для учеников": ["Оқушы коды", "Student code"],
+    "принимает попытки": ["әрекеттер қабылдануда", "accepting attempts"],
+    "доступ закрыт": ["қолжетімділік жабық", "access closed"],
+    "Закрыть доступ": ["Қолжетімділікті жабу", "Close access"],
+    "Открыть доступ": ["Қолжетімділікті ашу", "Open access"],
+    "Скопировать код": ["Кодты көшіру", "Copy code"],
+    "Результаты": ["Нәтижелер", "Results"],
+    "Код теста скопирован.": ["Тест коды көшірілді.", "Test code copied."],
+    "Код теста:": ["Тест коды:", "Test code:"],
+    "В тесте должен остаться хотя бы один вопрос.": ["Тестте кемінде бір сұрақ қалуы керек.", "A test must contain at least one question."],
+    "Добавьте хотя бы один вопрос.": ["Кемінде бір сұрақ қосыңыз.", "Add at least one question."],
+    "Заполните текст вопроса": ["Сұрақ мәтінін толтырыңыз", "Enter the question text"],
+    "Заполните все варианты ответа у вопроса": ["Сұрақтың барлық жауап нұсқасын толтырыңыз", "Fill in all answer options"],
+    "Отметьте правильный вариант у вопроса": ["Дұрыс жауап нұсқасын белгілеңіз", "Mark the correct answer"],
+    "Вопросы не сохранились": ["Сұрақтар сақталмады", "Questions were not saved"],
+    "Черновик теста сохранён. Открой доступ, когда будешь готов.": ["Тест нобайы сақталды. Дайын болғанда қолжетімділікті ашыңыз.", "Test draft saved. Open access when you're ready."],
+    "Доступ к тесту закрыт.": ["Тестке қолжетімділік жабылды.", "Test access closed."],
+    "Тест открыт. Поделись кодом с учениками.": ["Тест ашық. Кодты оқушылармен бөлісіңіз.", "Test is open. Share the code with students."],
+    "Загрузка результатов…": ["Нәтижелер жүктелуде…", "Loading results…"],
+    "Пока никто не проходил этот тест.": ["Бұл тестті әлі ешкім тапсырған жоқ.", "No one has taken this test yet."],
+    "Результат": ["Нәтиже", "Score"],
+    "Статус": ["Күйі", "Status"],
+    "Завершена после предупреждений": ["Ескертуден кейін аяқталды", "Ended after warnings"],
+    "Сдана": ["Тапсырылды", "Submitted"],
+    "В процессе": ["Орындалуда", "In progress"],
+    "Осталось времени:": ["Қалған уақыт:", "Time left:"],
+    "Аккаунт": ["Аккаунт", "Account"],
+    "Подключи базу данных": ["Дерекқорды қосыңыз", "Connect your database"],
+    "Что будет работать": ["Қолжетімді мүмкіндіктер", "What will work"],
+    "Добавь URL проекта Supabase и публичный anon key в": ["Supabase жобасының URL-і мен ашық anon кілтін мына файлға қосыңыз:", "Add your Supabase project URL and public anon key to"],
+    "В браузер можно добавлять только anon key; доступ ограничивают политики базы данных.": ["Браузерге тек anon кілтін қосуға болады; қолжетімділікті дерекқор саясаты шектейді.", "Only the anon key belongs in the browser; database policies control access."],
+    "Не публикуй пароли и service role key.": ["Құпиясөздер мен service role кілтін жарияламаңыз.", "Never publish passwords or the service role key."],
+    "Загружаем приложение…": ["Қосымша жүктелуде…", "Loading application…"],
+    "Дополнительная попытка разрешена.": ["Қосымша әрекетке рұқсат берілді.", "An extra attempt has been granted."],
+    "Вопросов: 1": ["Сұрақ саны: 1", "Questions: 1"],
+    "Информатика — основы IT (25 вопросов)": ["Информатика — IT негіздері (25 сұрақ)", "Computer science — IT basics (25 questions)"],
+    "Заполните текст вопроса": ["Сұрақ мәтінін толтырыңыз", "Enter the question text"],
+    "Заполните все варианты ответа у вопроса": ["Сұрақтың барлық жауап нұсқасын толтырыңыз", "Fill in all answer options"],
+    "Отметьте правильный вариант у вопроса": ["Дұрыс жауап нұсқасын белгілеңіз", "Mark the correct answer"],
+    "Черновик теста сохранён. Открой доступ, когда будешь готов.": ["Тест нобайы сақталды. Дайын болғанда қолжетімділікті ашыңыз.", "Test draft saved. Open access when you're ready."],
+    "Тест не найден или учитель ещё не открыл доступ.": ["Тест табылмады немесе мұғалім әлі рұқсат берген жоқ.", "Test not found or your teacher has not opened access."],
+    "Две попытки уже использованы.": ["Екі әрекет те пайдаланылды.", "Both attempts have been used."],
+    "В тесте пока нет вопросов.": ["Тестте әзірге сұрақ жоқ.", "This test has no questions yet."],
+    "Только ученик может просматривать список тестов.": ["Тесттер тізімін тек оқушы көре алады.", "Only students can view the test list."],
+    "Внимание: вы покинули страницу теста. При повторном уходе эта попытка завершится.": ["Назар аударыңыз: тест бетінен шықтыңыз. Қайта шықсаңыз, бұл әрекет аяқталады.", "Warning: you left the test page. Leaving again will end this attempt."]
+  };
+
+  function translateText(source) {
+    if (locale === "ru") return source;
+    const translated = translations[source];
+    return translated ? translated[locale === "kk" ? 0 : 1] : source;
+  }
+
+  function localizeMarkup(markup) {
+    const languageIndex = locale === "kk" ? 0 : 1;
+    return String(markup).split(/(\uE000[\s\S]*?\uE001)/).map((part) => {
+      if (part.startsWith("\uE000") && part.endsWith("\uE001")) return part.slice(1, -1);
+      if (locale === "ru") return part;
+      return Object.keys(translations)
+        .sort((left, right) => right.length - left.length)
+        .reduce((result, source) => result.split(source).join(translations[source][languageIndex]), part);
+    }).join("");
+  }
+
+  function applyLocale() {
+    document.documentElement.lang = locale;
+    const localeName = locale === "kk" ? "Қазақша" : locale === "en" ? "English" : "Русский";
+    languageSelect.setAttribute("aria-label", locale === "kk" ? "Интерфейс тілі" : locale === "en" ? "Interface language" : "Язык интерфейса");
+    document.querySelector(".language-picker .visually-hidden").textContent = localeName;
+    document.querySelector(".brand").setAttribute("aria-label", locale === "kk"
+      ? "BilimQadam — басты бет"
+      : locale === "en" ? "BilimQadam — home" : "BilimQadam — главная");
+    document.title = locale === "kk" ? "BilimQadam — оқу тесттері" :
+      locale === "en" ? "BilimQadam — learning tests" : "BilimQadam — учебные тесты";
+    footer.textContent = locale === "kk"
+      ? "Оқу тесттеріне арналған платформа. Сайт басқа қолданбаларды бұғаттамайды."
+      : locale === "en"
+        ? "A platform for learning tests. This website does not block other apps."
+        : "Платформа для учебных тестов. Сайт не блокирует другие приложения.";
+    languageSelect.value = locale;
+  }
+
+  function installLocalizedHtml(element) {
+    const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
+    Object.defineProperty(element, "innerHTML", {
+      configurable: true,
+      get() { return descriptor.get.call(this); },
+      set(value) { descriptor.set.call(this, localizeMarkup(value)); }
+    });
+  }
+
+  installLocalizedHtml(root);
+  installLocalizedHtml(accountArea);
+  applyLocale();
+  languageSelect.addEventListener("change", () => {
+    localStorage.setItem("bilimqadam-language", languageSelect.value);
+    window.location.reload();
+  });
 
   function escapeHtml(value) {
-    return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    const escaped = String(value ?? "").replace(/[&<>"']/g, (char) => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
     }[char]));
+    return `\uE000${escaped}\uE001`;
   }
 
   function showMessage(text, type) {
@@ -23,7 +260,7 @@
     const message = document.createElement("div");
     message.className = `${type || "notice"} global-message`;
     message.setAttribute("role", type === "error" ? "alert" : "status");
-    message.textContent = text;
+    message.textContent = localizeMarkup(text);
     root.prepend(message);
     clearTimeout(noticeTimer);
     noticeTimer = setTimeout(() => message.remove(), 8000);
@@ -48,6 +285,7 @@
   }
 
   function renderAuth() {
+    languageSelect.disabled = false;
     accountArea.textContent = "";
     root.innerHTML = `
       <section class="hero">
@@ -94,7 +332,7 @@
       nameField.classList.toggle("hidden", !signUp);
       document.getElementById("display-name").required = signUp;
       pass.autocomplete = signUp ? "new-password" : "current-password";
-      submit.textContent = signUp ? "Создать аккаунт" : "Войти";
+      submit.textContent = translateText(signUp ? "Создать аккаунт" : "Войти");
       document.getElementById("auth-message").textContent = "";
     }
     loginTab.addEventListener("click", () => changeMode(false));
@@ -114,8 +352,9 @@
           });
           if (error) throw error;
           if (!data.session) {
-            document.getElementById("auth-message").innerHTML =
-              '<div class="success">Аккаунт создан. Подтвердите email по ссылке из письма, затем войдите.</div>';
+            document.getElementById("auth-message").innerHTML = localizeMarkup(
+              '<div class="success">Аккаунт создан. Подтвердите email по ссылке из письма, затем войдите.</div>'
+            );
           } else {
             await refreshSession();
           }
@@ -146,7 +385,7 @@
   }
 
   function renderHeader() {
-    const role = profile.role === "teacher" ? "Учитель" : "Ученик";
+    const role = translateText(profile.role === "teacher" ? "Учитель" : "Ученик");
     accountArea.innerHTML = `
       <span>${escapeHtml(profile.display_name || "Пользователь")}</span>
       <span class="role-badge">${role}</span>
@@ -170,7 +409,7 @@
   }
 
   function studentNotice() {
-    return `<div class="notice">При первом уходе со страницы появится предупреждение. При втором текущая попытка завершится и будет учтена в общем лимите из двух попыток. Система не блокирует другие приложения и не может гарантированно определить причину потери фокуса.</div>`;
+    return `<div class="notice">При первом уходе со страницы появится предупреждение. При втором текущая попытка завершится и будет учтена в общем лимите попыток. Учитель может разрешить дополнительные попытки. Система не блокирует другие приложения.</div>`;
   }
 
   async function renderStudentHome(message) {
@@ -180,18 +419,18 @@
       if (error) throw error;
       quizzes = data || [];
     } catch (error) {
-      root.innerHTML = `<section class="panel"><h2>Кабинет ученика</h2><div class="error">${escapeHtml(error.message)}</div><p class="muted">Обнови базу данных, выполнив supabase/upgrade_student_test_flow.sql в Supabase SQL Editor.</p></section>`;
+      root.innerHTML = `<section class="panel"><h2>Кабинет ученика</h2><div class="error">${escapeHtml(error.message)}</div><p class="muted">Обнови базу данных, выполнив supabase/upgrade_teacher_extra_attempts.sql в Supabase SQL Editor.</p></section>`;
       return;
     }
     root.innerHTML = `
       <section class="dashboard-head">
         <div><div class="eyebrow">Кабинет ученика</div><h1 style="font-size:34px;margin:7px 0">Тесты</h1>
-        <p class="muted">Закрытые тесты можно будет пройти, когда учитель откроет доступ. На каждый тест даётся до двух попыток.</p></div>
+        <p class="muted">Закрытые тесты можно будет пройти, когда учитель откроет доступ. На каждый тест даётся две попытки; учитель может разрешить дополнительные.</p></div>
       </section>
       <section class="panel">
         ${message ? `<div class="success">${escapeHtml(message)}</div>` : ""}
         <div class="quiz-list">${quizzes.length ? quizzes.map((quiz) => {
-          const remaining = Math.max(0, 2 - Number(quiz.attempts_used || 0));
+          const remaining = Math.max(0, Number(quiz.attempts_allowed || 2) - Number(quiz.attempts_used || 0));
           const available = quiz.is_published && remaining > 0 && quiz.question_count > 0;
           return `<article class="quiz-row">
             <div class="quiz-row-top"><h3>${escapeHtml(quiz.title)}</h3>
@@ -223,6 +462,7 @@
       activeAttempt = {
         id: data.attempt_id,
         number: data.attempt_number,
+        attemptsAllowed: data.attempts_allowed || 2,
         title: data.title,
         questions: data.questions,
         deadline: Date.now() + durationMinutes * 60_000,
@@ -245,6 +485,7 @@
 
   function renderAttempt() {
     if (!activeAttempt) return renderStudentHome();
+    languageSelect.disabled = true;
     clearInterval(attemptTimer);
     renderHeader();
     const test = activeAttempt;
@@ -253,10 +494,10 @@
       <section class="panel">
         <div class="attempt-head">
           <div>
-            <div class="eyebrow">Попытка ${test.number} из 2</div>
+            <div class="eyebrow">${translateText("Попытка")} ${test.number} из ${test.attemptsAllowed}</div>
             <h1 style="font-size:28px">${escapeHtml(test.title)}</h1>
           </div>
-          <span class="role-badge">${escapeHtml(profile.display_name || "Ученик")}</span>
+          <span class="role-badge">${escapeHtml(profile.display_name || translateText("Ученик"))}</span>
         </div>
         <div class="attempt-timer" id="attempt-timer" role="timer" aria-live="polite"></div>
         <div class="attempt-progress" aria-label="Прогресс"><span style="width:${test.questions.length ? Math.round(progress / test.questions.length * 100) : 0}%"></span></div>
@@ -285,7 +526,7 @@
       const seconds = Math.ceil(remaining / 1000);
       const timer = document.getElementById("attempt-timer");
       if (timer) {
-        timer.textContent = `Осталось времени: ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+        timer.textContent = `${translateText("Осталось времени:")} ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
         timer.classList.toggle("timer-warning", seconds <= 60);
       }
       if (remaining <= 0) {
@@ -303,7 +544,7 @@
         test.answers[questionId] = answer;
         test.unsavedAnswers[questionId] = answer;
         const progressText = root.querySelector(".button-row .muted");
-        progressText.textContent = `${Object.keys(test.answers).length} из ${test.questions.length} ответов`;
+        progressText.textContent = `${Object.keys(test.answers).length} из ${test.questions.length} ${translateText("ответов")}`;
         root.querySelector(".attempt-progress span").style.width =
           `${Math.round(Object.keys(test.answers).length / test.questions.length * 100)}%`;
         test.pendingSaves += 1;
@@ -340,7 +581,7 @@
     }
     if (!lockedByViolation) {
       const unanswered = test.questions.length - Object.keys(test.answers).length;
-      if (unanswered > 0 && !timedOut && !window.confirm(`Осталось вопросов без ответа: ${unanswered}. Завершить тест?`)) return;
+      if (unanswered > 0 && !timedOut && !window.confirm(`${translateText("Осталось вопросов без ответа:")} ${unanswered}. ${translateText("Завершить тест?")}`)) return;
     }
     test.submitting = true;
     clearInterval(attemptTimer);
@@ -361,6 +602,7 @@
   }
 
   function renderResult(result, lockedByViolation, timedOut) {
+    languageSelect.disabled = false;
     renderHeader();
     const percent = result && Number.isFinite(Number(result.score_percent)) ? Number(result.score_percent) : null;
     root.innerHTML = `
@@ -448,9 +690,9 @@
   function fillItSample() {
     document.getElementById("quiz-title").value = "Информатика — основы IT (25 вопросов)";
     const editors = document.getElementById("question-editors");
-    editors.innerHTML = itSampleQuestions.map(([prompt, options, correct_index], index) =>
+    editors.innerHTML = localizeMarkup(itSampleQuestions.map(([prompt, options, correct_index], index) =>
       makeQuestionEditor(index, { prompt, options, correct_index })
-    ).join("");
+    ).join(""));
     updateQuestionCount();
     bindRemoveQuestionButtons();
   }
@@ -458,7 +700,7 @@
   function updateQuestionCount() {
     const count = document.getElementById("question-count");
     const editors = document.getElementById("question-editors");
-    if (count && editors) count.textContent = `Вопросов: ${editors.querySelectorAll("[data-question]").length}`;
+    if (count && editors) count.textContent = `${translateText("Вопросов:")} ${editors.querySelectorAll("[data-question]").length}`;
   }
 
   function makeQuestionEditor(index, question) {
@@ -538,9 +780,9 @@
       </div>`;
 
     const list = document.getElementById("quiz-list");
-    if (!data.length) list.innerHTML = '<div class="empty-state">Пока нет тестов. Создай первый в панели справа.</div>';
+    if (!data.length) list.innerHTML = localizeMarkup('<div class="empty-state">Пока нет тестов. Создай первый в панели справа.</div>');
     else {
-      list.innerHTML = data.map((quiz) => `
+      list.innerHTML = localizeMarkup(data.map((quiz) => `
         <article class="quiz-row" data-quiz="${escapeHtml(quiz.id)}">
           <div class="quiz-row-top"><h3>${escapeHtml(quiz.title)}</h3><span class="status-badge">${quiz.is_published ? "Открыт" : "Черновик"}</span></div>
           <span class="quiz-code">${escapeHtml(quiz.access_code)}</span>
@@ -552,7 +794,7 @@
             <button class="button ghost view-results" type="button" data-id="${escapeHtml(quiz.id)}">Результаты</button>
           </div>
           <div class="results-slot" id="results-${escapeHtml(quiz.id)}"></div>
-        </article>`).join("");
+        </article>`).join(""));
     }
     document.getElementById("new-quiz").addEventListener("click", () => {
       document.getElementById("quiz-title").focus();
@@ -561,7 +803,7 @@
     document.getElementById("add-question").addEventListener("click", () => {
       const editors = document.getElementById("question-editors");
       const index = editors.querySelectorAll("[data-question]").length;
-      editors.insertAdjacentHTML("beforeend", makeQuestionEditor(index));
+      editors.insertAdjacentHTML("beforeend", localizeMarkup(makeQuestionEditor(index)));
       bindRemoveQuestionButtons();
       updateQuestionCount();
     });
@@ -591,7 +833,7 @@
         }
         button.closest("[data-question]").remove();
         Array.from(editors.querySelectorAll("[data-question]")).forEach((editor, index) => {
-          editor.querySelector("h3").textContent = `Вопрос ${index + 1}`;
+          editor.querySelector("h3").textContent = `${translateText("Вопрос")} ${index + 1}`;
           editor.querySelectorAll('input[type="radio"]').forEach((radio) => { radio.name = `correct-${index}`; });
         });
         updateQuestionCount();
@@ -650,26 +892,54 @@
   async function showResults(event) {
     const id = event.currentTarget.dataset.id;
     const slot = document.getElementById(`results-${id}`);
-    slot.innerHTML = '<p class="muted">Загрузка результатов…</p>';
+    slot.innerHTML = localizeMarkup('<p class="muted">Загрузка результатов…</p>');
     try {
       const { data, error } = await client.rpc("teacher_quiz_results", { p_quiz_id: id });
       if (error) throw error;
       if (!data.length) {
-        slot.innerHTML = '<div class="empty-state">Пока никто не проходил этот тест.</div>';
+        slot.innerHTML = localizeMarkup('<div class="empty-state">Пока никто не проходил этот тест.</div>');
         return;
       }
-      slot.innerHTML = `<div style="overflow-x:auto;margin-top:12px"><table class="results-table">
-        <thead><tr><th>Ученик</th><th>Попытка</th><th>Результат</th><th>Статус</th></tr></thead>
+      const latestAttemptByStudent = new Map();
+      data.forEach((row) => latestAttemptByStudent.set(row.student_id, Math.max(
+        latestAttemptByStudent.get(row.student_id) || 0,
+        Number(row.attempt_number)
+      )));
+      slot.innerHTML = localizeMarkup(`<div style="overflow-x:auto;margin-top:12px"><table class="results-table">
+        <thead><tr><th>Ученик</th><th>Попытка</th><th>Результат</th><th>Статус</th><th>Действие</th></tr></thead>
         <tbody>${data.map((row) => `<tr>
           <td>${escapeHtml(row.student_name)}</td>
-          <td>${escapeHtml(row.attempt_number)} / 2</td>
+          <td>${escapeHtml(row.attempt_number)} / ${escapeHtml(row.attempts_allowed)}</td>
           <td>${row.score_percent == null ? "—" : `${escapeHtml(row.score_percent)}%`}</td>
           <td>${row.status === "locked" ? "Завершена после предупреждений" : row.status === "submitted" ? "Сдана" : "В процессе"}</td>
+          <td>${Number(row.attempt_number) >= Number(row.attempts_allowed) &&
+            Number(row.attempt_number) === latestAttemptByStudent.get(row.student_id)
+              ? `<button class="button secondary grant-attempt" type="button" data-student-id="${escapeHtml(row.student_id)}">Разрешить ещё попытку</button>`
+              : ""}</td>
         </tr>`).join("")}</tbody>
-      </table></div>`;
+      </table></div>`);
+      slot.querySelectorAll(".grant-attempt").forEach((button) => {
+        button.addEventListener("click", () => grantExtraAttempt(id, button.dataset.studentId, button));
+      });
     } catch (error) {
       slot.innerHTML = "";
       showError(error);
+    }
+  }
+
+  async function grantExtraAttempt(quizId, studentId, button) {
+    button.disabled = true;
+    try {
+      const { error } = await client.rpc("teacher_grant_quiz_attempt", {
+        p_quiz_id: quizId,
+        p_student_id: studentId
+      });
+      if (error) throw error;
+      showMessage("Дополнительная попытка разрешена.", "success");
+      await showResults({ currentTarget: { dataset: { id: quizId } } });
+    } catch (error) {
+      showError(error);
+      button.disabled = false;
     }
   }
 

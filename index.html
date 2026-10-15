@@ -1,28 +1,37 @@
 <!doctype html>
-<html lang="ru">
+<html lang="kk">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#111827">
-    <meta name="description" content="Простая платформа для тестов с ограниченными попытками.">
-    <title>ТестКласс — тесты для класса</title>
+    <meta name="description" content="BilimQadam — мұғалімдер мен оқушыларға арналған тест платформасы.">
+    <title>BilimQadam — оқу тесттері</title>
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <a class="brand" href="#" aria-label="ТестКласс — главная">
-          <span class="brand-mark">Т</span>
-          <span>ТестКласс</span>
+        <a class="brand" href="#" aria-label="BilimQadam — басты бет">
+          <span class="brand-mark">B</span>
+          <span>BilimQadam</span>
         </a>
-        <div id="account-area" class="account-area"></div>
+        <div class="topbar-actions">
+          <label class="language-picker">
+            <span class="visually-hidden">Язык</span>
+            <select id="language-select" aria-label="Язык интерфейса">
+              <option value="kk">Қазақша</option>
+              <option value="ru">Русский</option>
+              <option value="en">English</option>
+            </select>
+          </label>
+          <div id="account-area" class="account-area"></div>
+        </div>
       </header>
       <main id="app" class="main-content" tabindex="-1">
-        <div class="loading-card">Загружаем приложение…</div>
+        <div class="loading-card">Қосымша жүктелуде…</div>
       </main>
       <footer class="footer">
-        Для контрольных работ учитель должен проверять личность ученика отдельно.
-        Веб-сайт может обнаружить уход со страницы, но не блокирует другие приложения.
+        Оқу тесттеріне арналған платформа. Сайт басқа қолданбаларды бұғаттамайды.
       </footer>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>

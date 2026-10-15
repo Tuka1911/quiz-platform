@@ -53,7 +53,7 @@ create table if not exists public.attempts (
   id uuid primary key default gen_random_uuid(),
   quiz_id uuid not null references public.quizzes (id) on delete cascade,
   student_id uuid not null references public.profiles (id) on delete cascade,
-  attempt_number smallint not null check (attempt_number between 1 and 2),
+  attempt_number smallint not null check (attempt_number > 0),
   status text not null default 'in_progress' check (status in ('in_progress', 'submitted', 'locked')),
   answers jsonb not null default '{}'::jsonb check (jsonb_typeof(answers) = 'object'),
   focus_violations smallint not null default 0 check (focus_violations between 0 and 2),
@@ -64,8 +64,23 @@ create table if not exists public.attempts (
   unique (quiz_id, student_id, attempt_number)
 );
 
+create table if not exists public.quiz_attempt_grants (
+  quiz_id uuid not null references public.quizzes (id) on delete cascade,
+  student_id uuid not null references public.profiles (id) on delete cascade,
+  extra_attempts smallint not null default 0 check (extra_attempts between 0 and 100),
+  updated_at timestamptz not null default now(),
+  primary key (quiz_id, student_id)
+);
+
+alter table public.attempts drop constraint if exists attempts_attempt_number_check;
+alter table public.attempts add constraint attempts_attempt_number_check check (attempt_number > 0);
+alter table public.attempts drop constraint if exists attempts_quiz_id_student_id_attempt_number_key;
+alter table public.attempts add constraint attempts_quiz_id_student_id_attempt_number_key unique (quiz_id, student_id, attempt_number);
+
 create index if not exists attempts_student_quiz_idx on public.attempts (student_id, quiz_id);
 create index if not exists questions_quiz_position_idx on public.questions (quiz_id, position);
+alter table public.quiz_attempt_grants enable row level security;
+revoke all on public.quiz_attempt_grants from anon, public, authenticated;
 
 create or replace function public.create_student_profile()
 returns trigger
@@ -106,6 +121,7 @@ $$;
 revoke all on function public.is_teacher() from public;
 grant execute on function public.is_teacher() to authenticated;
 
+drop function if exists public.student_quiz_list();
 create or replace function public.student_quiz_list()
 returns table (
   quiz_id uuid,
@@ -114,6 +130,7 @@ returns table (
   question_count bigint,
   duration_minutes integer,
   attempts_used bigint,
+  attempts_allowed bigint,
   access_code text
 )
 language plpgsql
@@ -137,6 +154,8 @@ begin
          q.duration_minutes,
          (select count(*) from public.attempts a
           where a.quiz_id = q.id and a.student_id = (select auth.uid())),
+         2::bigint + coalesce((select g.extra_attempts::bigint from public.quiz_attempt_grants g
+                               where g.quiz_id = q.id and g.student_id = (select auth.uid())), 0::bigint),
          case when q.is_published then q.access_code else null end
   from public.quizzes q
   order by q.created_at desc;
@@ -251,6 +270,7 @@ grant select, insert, update, delete on public.quizzes to authenticated;
 grant select, insert, update, delete on public.questions to authenticated;
 grant select on public.attempts to authenticated;
 
+drop function if exists public.start_quiz_attempt(text);
 create or replace function public.start_quiz_attempt(p_access_code text)
 returns jsonb
 language plpgsql
@@ -260,6 +280,7 @@ as $$
 declare
   quiz_row public.quizzes%rowtype;
   attempt_count integer;
+  attempt_limit integer;
   next_attempt integer;
   attempt_row public.attempts%rowtype;
   quiz_questions jsonb;
@@ -282,8 +303,12 @@ begin
   select count(*) into attempt_count
   from public.attempts
   where quiz_id = quiz_row.id and student_id = (select auth.uid());
-  if attempt_count >= 2 then
-    raise exception 'Две попытки уже использованы.';
+  select 2 + coalesce(g.extra_attempts, 0) into attempt_limit
+  from (select 1) one
+  left join public.quiz_attempt_grants g
+    on g.quiz_id = quiz_row.id and g.student_id = (select auth.uid());
+  if attempt_count >= attempt_limit then
+    raise exception 'Ученик использовал все разрешённые попытки.';
   end if;
   next_attempt := attempt_count + 1;
 
@@ -303,6 +328,7 @@ begin
   return jsonb_build_object(
     'attempt_id', attempt_row.id,
     'attempt_number', attempt_row.attempt_number,
+    'attempts_allowed', attempt_limit,
     'title', quiz_row.title,
     'duration_minutes', quiz_row.duration_minutes,
     'started_at', attempt_row.started_at,
@@ -383,9 +409,12 @@ begin
       finished_at = now()
   where id = p_attempt_id;
 
-  select greatest(0, 2 - count(*)) into remaining
-  from public.attempts
-  where quiz_id = attempt_row.quiz_id and student_id = (select auth.uid());
+  select greatest(0, 2 + coalesce(g.extra_attempts, 0) - count(*)) into remaining
+  from public.attempts a
+  left join public.quiz_attempt_grants g
+    on g.quiz_id = attempt_row.quiz_id and g.student_id = (select auth.uid())
+  where a.quiz_id = attempt_row.quiz_id and a.student_id = (select auth.uid())
+  group by g.extra_attempts;
 
   return jsonb_build_object(
     'correct_count', correct_total,
@@ -396,10 +425,13 @@ begin
 end;
 $$;
 
+drop function if exists public.teacher_quiz_results(uuid);
 create or replace function public.teacher_quiz_results(p_quiz_id uuid)
 returns table (
+  student_id uuid,
   student_name text,
   attempt_number smallint,
+  attempts_allowed integer,
   status text,
   score_percent integer,
   started_at timestamptz,
@@ -418,8 +450,11 @@ begin
   end if;
 
   return query
-  select p.display_name,
+  select p.id,
+         p.display_name,
          a.attempt_number,
+         2 + coalesce((select g.extra_attempts from public.quiz_attempt_grants g
+                       where g.quiz_id = a.quiz_id and g.student_id = a.student_id), 0),
          a.status,
          case when a.correct_count is null then null
               else round((a.correct_count::numeric / a.question_count) * 100)::integer end,
@@ -432,11 +467,45 @@ begin
 end;
 $$;
 
+create or replace function public.teacher_grant_quiz_attempt(p_quiz_id uuid, p_student_id uuid)
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  granted integer;
+begin
+  if not public.is_teacher() or not exists (
+    select 1 from public.quizzes q
+    where q.id = p_quiz_id and q.owner_id = (select auth.uid())
+  ) then
+    raise exception 'Нет доступа к этому тесту.';
+  end if;
+  perform 1 from public.quizzes q where q.id = p_quiz_id for update;
+  if not exists (select 1 from public.profiles p where p.id = p_student_id and p.role = 'student')
+     or not exists (select 1 from public.attempts a where a.quiz_id = p_quiz_id and a.student_id = p_student_id) then
+    raise exception 'Ученик не найден среди участников этого теста.';
+  end if;
+
+  insert into public.quiz_attempt_grants (quiz_id, student_id, extra_attempts)
+  values (p_quiz_id, p_student_id, 1)
+  on conflict (quiz_id, student_id) do update
+    set extra_attempts = public.quiz_attempt_grants.extra_attempts + 1,
+        updated_at = now()
+  returning extra_attempts into granted;
+
+  return 2 + granted;
+end;
+$$;
+
 revoke all on function public.start_quiz_attempt(text) from public;
 revoke all on function public.record_focus_violation(uuid) from public;
 revoke all on function public.submit_quiz_attempt(uuid) from public;
 revoke all on function public.teacher_quiz_results(uuid) from public;
+revoke all on function public.teacher_grant_quiz_attempt(uuid, uuid) from public;
 grant execute on function public.start_quiz_attempt(text) to authenticated;
 grant execute on function public.record_focus_violation(uuid) to authenticated;
 grant execute on function public.submit_quiz_attempt(uuid) to authenticated;
 grant execute on function public.teacher_quiz_results(uuid) to authenticated;
+grant execute on function public.teacher_grant_quiz_attempt(uuid, uuid) to authenticated;
