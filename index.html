@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#111827">
+    <meta name="description" content="Простая платформа для тестов с ограниченными попытками.">
+    <title>ТестКласс — тесты для класса</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="ТестКласс — главная">
+          <span class="brand-mark">Т</span>
+          <span>ТестКласс</span>
+        </a>
+        <div id="account-area" class="account-area"></div>
+      </header>
+      <main id="app" class="main-content" tabindex="-1">
+        <div class="loading-card">Загружаем приложение…</div>
+      </main>
+      <footer class="footer">
+        Для контрольных работ учитель должен проверять личность ученика отдельно.
+        Веб-сайт может обнаружить уход со страницы, но не блокирует другие приложения.
+      </footer>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
